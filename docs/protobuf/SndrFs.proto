@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+package com.sndr.proto;
+//Default - SPEED, other options CODE_SIZE, LITE_RUNTIME
+option optimize_for = SPEED;
+
+message SndrFS {
+	enum DataType {
+		Raw = 0;
+		Directory = 1;
+		File = 2;
+		Metadata = 3;
+		Symlink = 4;
+	}
+	DataType type = 1;
+	string name = 2;
+	repeated SndrFS node = 3;
+	MetaData metaData = 4;
+}
+
+message MetaData {
+	uint64 hash = 1;
+	uint64 size = 2;
+	google.protobuf.Timestamp modified = 3;
+	string mimetype = 4;
+}

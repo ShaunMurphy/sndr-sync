@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+package com.sndr.sync;
+//Default - SPEED, other options CODE_SIZE, LITE_RUNTIME
+option optimize_for = SPEED;
+
+
+message Directory {
+   string name = 1;
+   //Directory parent = 2;
+   repeated Directory directory = 3;
+   repeated File file = 4;
+}
+
+message File {
+   string name = 1;
+   //Directory path = 2;
+   string mimetype = 3;
+   uint64 hash = 4;
+   uint64 size = 5;
+   google.protobuf.Timestamp modified = 6;
+   //bytes data = 7;
+}
+
+
+
+
+
+service Services {
+   rpc ListDirectory (Request.ListDirectory) returns (Response.ListDirectory) {};
+   rpc UploadFile (Request.UploadFile) returns (Response.UploadFile) {};
+   rpc DownloadFile (Request.DownloadFile) returns (Response.DownloadFile) {};
+   rpc DeleteFile (Request.DeleteFile) returns (Response.DeleteFile) {};
+   rpc MoveFile (Request.MoveFile) returns (Response.MoveFile) {};
+}
+
+
+
+enum RequestType {
+	LIST_DIRECTORY = 0;
+	UPLOAD_FILE = 1;
+	DOWNLOAD_FILE = 2;
+	DELETE_FILE = 3;
+	MOVE_FILE = 4;
+}
+
+
+message Authentication {
+	RequestType type = 1;
+	google.protobuf.Timestamp timestamp = 2; 
+    bytes signature = 3;
+	string userUri = 4;
+}
+
+message Request {
+	message ListDirectory {
+		Authentication authentication = 1;
+		string startPath = 2;
+		uint32 depth = 3;
+	}
+	
+	message UploadFile {
+		Authentication authentication = 1;
+		File file = 2;
+		//TODO Binary data
+	}
+	
+	message DownloadFile {
+		Authentication authentication = 1;
+		string path = 2;
+		string fileName = 3;
+	}
+	
+	message MoveFile {
+		Authentication authentication = 1;
+		string fromPath = 2;
+		string toPath = 3;
+		File fromFile = 4;
+		File toFile = 5;
+	}
+	
+	message DeleteFile {
+		Authentication authentication = 1;
+		File file = 2;
+	}
+}
+
+message Response {
+	message ListDirectory {
+		Authentication authentication = 1;
+		Directory root = 2;
+		string startPath = 3;
+		uint32 depth = 4;
+	}
+	
+	message UploadFile {
+		Authentication authentication = 1;
+		string status = 2;
+	}
+	
+	message DownloadFile {
+		Authentication authentication = 1;
+		File file = 2;
+		//TODO Binary data
+	}
+	
+	message MoveFile {
+		Authentication authentication = 1;
+		string status = 2;
+	}
+	
+	message DeleteFile {
+		Authentication authentication = 1;
+		string status = 2;
+	}
+}

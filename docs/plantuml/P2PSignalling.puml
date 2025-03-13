@@ -1,0 +1,28 @@
+@startuml
+group Client remote device request (RDR)
+   client -> sndr : POST RDR
+   sndr -> sndrBlock : RDR notification
+   sndrBlock -> sndrBlock : validate RDR
+end
+group sndrBlock session description protocol (SDP)
+   sndrBlock ->o ICE : generate SDP
+   sndrBlock -> sndr : POST block_SDP
+   sndr -> client : block_SDP notification
+end
+group client session description protocol (SDP)
+   client ->o ICE : generate SDP
+   client -> sndr : POST client_SDP
+   sndr -> sndrBlock : client_SDP notification
+end
+group ICE 2 phase connect (RFC 5245)
+   sndrBlock ->o client : 2 phase connect
+   client ->o sndrBlock : 2 phase connect
+end
+group Common Protobuf Request Response (CPRR)
+      client -> sndrBlock : Protobuf Request
+   loop while client needs more data
+      sndrBlock -> client : Protobuf Response
+      client -> sndrBlock : Protobuf Ack/Continue
+   end
+end
+@enduml

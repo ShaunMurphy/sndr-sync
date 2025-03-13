@@ -1,0 +1,68 @@
+@startuml
+
+box "User Devices" #LightGreen
+	participant Client_A
+	participant Client_B
+	participant Client_C
+	participant Client_D
+end box	
+box "Malicious Device" #Pink
+	participant Client_E
+end box
+box "LAN" #LightBlue
+	participant LAN 
+end box
+
+
+
+
+group Initialize
+	Client_A -> LAN : UDP M-SEARCH Discovery request ST = sndr???
+	alt Good Client
+		Client_B -> Client_A : UDP OK
+		Client_C -> Client_A : UDP OK
+		Client_D -> Client_A : UDP OK
+		activate Client_A
+		Client_A --> Client_A : Verify response, using signature verification.
+		Client_A --> Client_A : Accept Client. 
+		destroy Client_A
+	end
+	alt Bad Client (malicious or stupid)
+		Client_E -> Client_A : UDP OK	
+		activate Client_A
+		Client_A --> Client_A : Verify response, using signature verification.
+		Client_A --> Client_A : Ignore Client
+		destroy Client_A
+	end
+end
+
+group File Transfer
+
+	Client_A -> Client_B : Request File UUID
+	Client_A -> Client_C : Request File UUID
+	Client_A -> Client_D : Request File UUID
+	
+	activate Client_A
+	Client_B -> Client_A : Says it has the file. Client_A verifies.
+	Client_C -> Client_A : Says it has the file. Client_A verifies.
+
+	group In parallel
+		Client_B -> Client_A : TCP Response
+		activate Client_A
+		Client_B -> Client_A : Stream encrypted file
+		Client_A --> Client_A : Verifies chunk checksum.
+		deactivate Client_A
+		
+		Client_C -> Client_A : TCP Response
+		activate Client_A
+		Client_C -> Client_A : Stream encrypted file
+		Client_A --> Client_A : Verifies chunk checksum.
+		deactivate Client_A
+	end
+	
+	Client_A --> Client_A : Verifies file checksum.
+	Client_A --> Client_A : Decrypts file using user private key.
+	destroy Client_A	
+end
+
+@enduml

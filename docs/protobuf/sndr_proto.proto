@@ -1,0 +1,51 @@
+package com.sndr.sync;
+option java_package = "com.sndr.sync";
+option java_outer_classname = "Sndr_Proto";
+
+message Request {
+	required int32 version = 1;
+	required string senderPublicKey = 2;
+	required bytes fileUuid = 3;
+	optional int64 fileLength = 4;
+}
+
+message Response {
+	required int32 version = 1;
+	required int64 unencryptedFileLength = 2;
+	required bytes baseNonce = 3;
+	required bytes ephemeralNonce = 4;
+	required bytes key = 5;
+	required string keyType = 6;
+	//For the requested unencrypted file.
+	required bytes checksum = 7;
+
+	//Information about the chunks.
+	optional int32 start = 8;
+	optional int32 end = 9;
+}
+
+message Chunk {
+	optional int64 length = 1;
+	optional int32 current = 2;
+	optional bool isLast = 3;
+	optional bytes checksum = 4;
+	required bytes chunk = 5;
+}
+
+message KeyRequest {
+	required int32 version = 1;
+	required string username = 2;
+	required bytes devicePublicKey = 3;
+	required bytes deviceUUID = 4;
+	optional bytes signature = 5;
+}
+
+message KeyResponse {
+	required int32 version = 1;
+	required bytes encryptedKey = 2;
+	required string keyType = 3;
+	required bytes wrappedAesKey = 4;
+	required bytes iv = 5;
+	required bytes deviceUUID = 6;
+	optional bytes signature = 7;
+}

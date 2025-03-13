@@ -1,0 +1,55 @@
+@startuml
+title : <u>Key Service Process</u>
+box "User Devices" #LightBlue
+	participant Device_A
+	participant Device_B
+end box	
+box "LAN" #Violet
+	participant LAN 
+end box
+box "PrivateGiant Server" #LightGreen
+	participant Server
+end box
+
+
+== Multicast Request ==
+	Device_A -> LAN : UDP M-SEARCH Discovery for KeyEscrow
+	activate Device_A
+	LAN -> Device_B : Receives packet,\ndecides to respond or not.
+	Device_B --> Device_B : 
+	note left
+			**Checks packet for:**
+			- Missing fields.
+			- Device_B has the user's private key.
+			- Packet's sha1(user) ==
+			  Device_B's sha1(user).
+	end note
+...
+
+== Key Request ==
+	Device_B -> Device_A : Connects to A's TCP socket.
+	activate Device_B
+	Device_A -> Device_A : Generates key request with signature.
+	Device_A -> Device_B : Sends key request.
+	Device_B -> Device_B : Receives request,\nparses data.
+	Device_B -> Server : Gets the user devices.
+	activate Server
+	Server -> Device_B : Sends the user devices\nwith public keys and UUIDs
+	deactivate Server
+	Device_B -> Device_B : Validates A's request\nsing keys and UUIDs.
+
+
+== Key Response ==
+	Device_B -> Device_B : Generates key response\nwith signature.
+	Device_B -> Device_A : Sends key response
+	Device_A -> Device_A : Receives response, parses data.
+	destroy Device_B
+	Device_A -> Server : Gets the user devices.
+	activate Server
+	Server -> Device_A : Sends the user deviceswith public keys and UUIDs
+	deactivate Server
+	Device_A -> Device_A : Validates B's request using keys and UUIDs.	
+	Device_A -> Device_A : Get user private key if B was valid.
+	destroy Device_A
+
+@enduml

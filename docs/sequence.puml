@@ -1,0 +1,71 @@
+@startuml
+box "User Devices" #LightGreen
+	participant Client1
+	participant Client2
+	participant Client3
+end box	
+box "LAN" #LightBlue
+	participant LAN 
+end box
+
+
+group Joins Network
+	Client1 -> LAN : UDP Notify alive message
+	LAN -> Client1 : UDP OK 
+end
+group Still On Network
+	Client1 -> LAN : UDP NOTIFY alive message
+	LAN -> Client2 : 
+end
+group Updated Device/Service
+	Client1 -> LAN : UDP NOTIFY update message
+	LAN -> Client2 : 
+end
+group Leaves Network
+	Client1 -> LAN : UDP BYEBYE message
+	LAN -> Client2 : 
+end
+
+
+group Request Keys
+	alt Missing Client Table
+		Client1 -> LAN :UDP M-SEARCH Discovery request ST = SNDR.LINK
+		alt Good Client
+			Client2 -> Client1 : UDP OK
+			activate Client1
+			Client1 --> Client1 : Verify response, using signature verification.
+			Client1 --> Client1 : Accept Client. Do "Has Client Table".
+			destroy Client1
+		end
+		alt Bad Client (malicious or stupid)
+			Client3 -> Client1 : UDP OK	
+			activate Client1
+			Client1 --> Client1 : Verify response, using signature verification.
+			Client1 --> Client1 : Ignore Client
+			destroy Client1
+		end
+	end
+	alt Has Client Table
+		Client1 -> Client2 : TCP Request Private Key
+		activate Client2
+		Client2 --> Client2 : Encrypt key with requester's public key
+		Client2 -> Client1 : TCP Send encrypted key
+		destroy Client2
+		activate Client1
+		Client1 --> Client1 : Decrypt and store key.
+		destroy Client1
+	end
+end
+
+group Request Send File
+	Client1 -> Client2 : TCP Initialize
+	activate Client2
+	Client2 --> Client2 : Generate AES key
+	Client2 -> Client1 : TCP Reply with device encrypted AES key.
+	activate Client1
+	Client1 -> Client2 : TCP Send encrypted file.
+	deactivate Client1
+	Client2 --> Client2 : Decrypt file. Store or send it?
+	destroy Client2
+end
+@enduml

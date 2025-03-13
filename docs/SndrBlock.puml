@@ -1,0 +1,350 @@
+@startuml
+
+package "SndrBlock Server"  #LightBlue {
+	class SndrBlockServer
+	class ModelConverter
+	class SndrProcessor
+}
+
+
+package "Shared Classes" #Violet {
+	class FileService
+	class ProtobufBuilder
+	class RemoteConnection
+	class SndrBlockService
+}
+
+package "SndrBlockProto" #Grey {
+	class SndrBlockProto.SndrFS
+	class SndrBlockProto.Request
+	class SndrBlockProto.Response
+	class SndrBlockProto.RequestType
+}
+
+package "SndrBlock Client" #LightGreen {
+	class SndrBlockClient
+	class ClientManager
+	class ClientTask
+	class Request
+	class Response
+}
+
+package "Connection" #Pink {
+	class SndrBlock_TEST
+	class SndrBlockConnector
+	class ConnectionData
+	class SndrBlock_TEST.Command
+}
+
+QueuedTask <|-- SndrBlockConnector
+SndrBlockConnectorListener <|.. SndrBlock_TEST
+BaseTaskManager <|-- ClientManager
+BaseTask <|-- ClientTask
+
+SndrBlockServer --> "1" SndrProcessor
+SndrBlockServer --> "1" ModelConverter
+SndrBlockServer --> RemoteConnection
+SndrBlockServer --> "1" ProtobufBuilder
+SndrBlockServer --> SndrBlockProto.Request
+SndrBlockServer --> SndrBlockProto.RequestType
+
+SndrBlockService --> "1" FileService
+SndrBlockService --> "1" ProtobufBuilder
+
+SndrProcessor --> "1" ProtobufBuilder
+SndrProcessor --> "1" SndrBlockService
+SndrProcessor --> SndrBlockProto.Request
+SndrProcessor --> SndrBlockProto.Response
+SndrProcessor --> SndrBlockProto.RequestType
+SndrProcessor --> SndrBlockProto.SndrFS
+
+ModelConverter --> SndrBlockProto.Request
+ModelConverter --> SndrBlockProto.Response
+
+ProtobufBuilder --> ModelConverter
+ProtobufBuilder --> SndrBlockProto.Request
+ProtobufBuilder --> SndrBlockProto.RequestType
+ProtobufBuilder --> SndrBlockProto.Response
+ProtobufBuilder --> SndrBlockProto.Authentication
+ProtobufBuilder --> SndrBlockProto.SndrFS
+	
+SndrBlockClient --> "1" ProtobufBuilder
+SndrBlockClient --> RemoteConnection
+SndrBlockClient --> "1" SndrBlockService
+SndrBlockClient --> SndrBlockProto.RequestType
+SndrBlockClient --> SndrBlockProto.SndrFS
+SndrBlockClient --> SndrBlockProto.Response
+SndrBlockClient --> SndrBlockProto.Request
+
+ClientManager --* "0..*" ClientTask
+ClientTask --> Request
+ClientTask --> Response
+ClientTask --> RemoteConnection
+ClientTask --> "1" ProtobufBuilder
+ClientTask --> "1" SndrBlockService
+
+SndrBlock_TEST --> "1" SndrBlockClient
+SndrBlock_TEST --> SndrBlockProto.Response
+SndrBlock_TEST --> "1" SndrBlockConnector
+SndrBlock_TEST --> "0..*" ConnectionData
+SndrBlock_TEST --> "0..*" SndrBlock_TEST.Command
+SndrBlock_TEST --> RemoteConnection
+	
+RemoteConnection --> RequestType
+
+SndrBlockConnector "0..*" *--  RemoteConnection
+
+
+class SndrBlockServer {
+	-{static}Logger logger
+	-HashMap<String,RemoteConnection> connections
+	-ProtobufListener protobufListener
+	-SndrProcessor processor
+	+SndrBlockServer()
+	+void addConnection(RemoteConnection connection)
+}
+
+enum SndrProcessor {
+	INSTANCE
+	service
+	logger
+	-SndrProcessor()
+	+void requestListDirectory(RemoteConnection connection, Request.ListDirectory request)
+	+void requestDownloadFile(RemoteConnection connection, Request.DownloadFile request)
+	+void requestUploadFile(RemoteConnection connection, Request.UploadFile request)
+	+void requestMoveFile(RemoteConnection connection, Request.MoveFile request)
+	+void requestDeleteFile(RemoteConnection connection, Request.DeleteFile request)
+	+void requestSendMessage(RemoteConnection connection, Request.SendMessage request)
+	+void requestStashNote(RemoteConnection connection, Request.StashNote request)
+	+void requestStashFile(RemoteConnection connection, Request.StashFile request)
+}
+
+class ModelConverter {
+	-{static}Pattern htmlTagPattern
+	-ModelConverter()
+	-File resolveFile(String directory, String file)
+	+{static}Thread convert(String user, SndrBlockProto.Thread proto)
+	+{static}Message convert(SndrBlockProto.Message proto)
+	+{static}Attachment convert(SndrBlockProto.Attachment proto)
+	+{static}ServiceLink convert(SndrBlockProto.ServiceLink proto)
+	+{static}StashedNote convert(SndrBlockProto.StashedNote proto)
+	+{static}StashedFile convert(SndrBlockProto.StashedFile proto)
+	+{static}Tag convert(SndrBlockProto.Tag proto)
+	+{static}ThreadRules convert(SndrBlockProto.Rules proto)
+	+{static}Recipient convert(SndrBlockProto.Recipient proto)
+	+{static}List<Attachment> convert(String user, List<SndrBlockProto.Attachment> protos)
+	-{static}List<Tag> _convert(List<SndrBlockProto.Tag> protos)
+	+{static}List<Recipient> convert(List<SndrBlockProto.Recipient> protos, boolean sort)
+	+{static}SndrBlockProto.Thread convert(Thread thread)
+	+{static}SndrBlockProto.Message convert(Message message)
+	+{static}SndrBlockProto.Attachment convert(Attachment attachment)
+	+{static}SndrBlockProto.Tag convert(Tag tag)
+	+{static}SndrBlockProto.ServiceLink convert(ServiceLink serviceLink)
+	+{static}SndrBlockProto.Recipient convert(Recipient recipient)
+	+{static}SndrBlockProto.Rules convert(ThreadRules rules)
+	+{static}SndrBlockProto.StashedNote convert(StashedNote note)
+	+{static}SndrBlockProto.StashedFile convert(StashedFile file)
+	-{static}List<SndrBlockProto.Attachment> _convert(List<Attachment> attachments, String user)
+	-{static}List<SndrBlockProto.Tag> _convert(boolean ignoreThis, List<Tag> tags)
+	+{static}List<SndrBlockProto.Recipient> convert(boolean sort, List<Recipient> recipients)
+	-{static}String stripHTMLTags(String htmlText)
+}
+
+class SndrBlockConnector {
+	-EllipticCurveCrypto crypto
+	-byte[] temp
+	-Deflater deflater
+	-Inflater inflater
+	+SndrBlockConnector()
+	~Class<? extends QueuedItem> getQueuedItemClass()
+	+void startDeviceConnection(String user, String deviceUUID, KeyPair userKeys, SndrBlockConnectorListener listener)
+	+void resumeDeviceConnection(String connectionUUID, ConnectionData item)
+	~void process(QueuedItem item)
+	-void ready(ConnectionData data)
+	-void createOffer(ConnectionData data)
+	-void createConnection(ConnectionData data)
+	-void wait(ConnectionData data)
+	-void getConnection(ConnectionData data)
+	-void startConnection(ConnectionData data)
+	-byte[] compress(String input)
+	-String decompress(byte[] input)
+}
+
+class SndrBlockClient {
+	-ProtobufBuilder p
+	+SndrBlockClient()
+	+void getDirectoryTree(RemoteConnection connection, String path, int depth, ResponseCallback<Response.ListDirectory> callback)
+	+void downloadFile(RemoteConnection connection, String path, String fileName, File downloadFile, ResponseCallback<Response.DownloadFile> callback)
+	+void uploadFile(RemoteConnection connection, String path, String fileName, File uploadFile, ResponseCallback<Response.UploadFile> callback)
+	+void moveFile(RemoteConnection connection, String fromPath, String fromFile, String toPath, String toFile, ResponseCallback<Response.MoveFile> callback)
+	+void deleteFile(RemoteConnection connection, String path, String file, ResponseCallback<Response.DeleteFile> callback)
+	+void sendMessage(RemoteConnection connection, Message message, List<Recipient> recipients, ResponseCallback<Response.SendMessage> callback)
+	+void stashNote(RemoteConnection connection, StashedNote stashedNote, String updateEncryptedUUID, ResponseCallback<Response.StashNote> callback)
+	+void stashFile(RemoteConnection connection, StashedFile stashedFile, String updateEncryptedUUID, ResponseCallback<Response.StashFile> callback)
+}
+
+
+enum ProtobufBuilder {
+	INSTANCE
+	crypto
+	userKeys
+	userURI
+	~ProtobufBuilder()
+	-Authentication generateAuthentication(com.google.protobuf.GeneratedMessageV3.Builder<?> builder)
+	-Timestamp getTimestamp()
+	-ByteString generateSignature(com.google.protobuf.GeneratedMessageV3.Builder<?> builder)
+	+Request.ListDirectory requestListDirectory(String path, int depth)
+	+Request.DownloadFile requestDownloadFile(String path, String file)
+	+Request.UploadFile requestUploadFile(String path, SndrFS file)
+	+Request.MoveFile requestMoveFile(String fromPath, String fromFile, String toPath, String toFile)
+	+Request.DeleteFile requestDeleteFile(String path, String file)
+	+Request.SendMessage requestSendMessage(Message message, List<Recipient> recipients)
+	+Request.StashNote requestStashNote(StashedNote stashedNote, String updateEncryptedUUID)
+	+Request.StashFile requestStashFile(StashedFile stashedFile, String updateEncryptedUUID)
+	+Response.ListDirectory responseListDirectory(String path, int depth, SndrFS root)
+	+Response.DownloadFile responseDownloadFile(String path, SndrFS file)
+	+Response.UploadFile responseUploadFile(String status)
+	+Response.MoveFile responseMoveFile(String status)
+	+Response.DeleteFile responseDeleteFile(String status)
+	+Response.SendMessage responseSendMessage(String status)
+	+Response.StashNote responseStashNote(String status)
+	+Response.StashFile responseStashFile(String status)
+	+com.google.protobuf.GeneratedMessageV3 parseRequest(RequestType type, byte[] data)
+	+com.google.protobuf.GeneratedMessageV3 parseResponse(RequestType type, byte[] data)
+}
+
+
+class SndrBlock_TEST {
+	-{static}SndrBlock_TEST instance
+	-SndrBlockConnector connector
+	-Executor executor
+	-HashMap<String,RemoteConnection> connectionMap
+	-HashMap<String,SndrBlockConnector.ConnectionData> pendingConnectionMap
+	-ArrayBlockingQueue<Command> commandQueue
+	-List<Command> pendingCommands
+	-SndrBlockClient client
+	-SndrBlock_TEST()
+	+{static}SndrBlock_TEST getInstance()
+	-void process(Command command)
+	+void getDirectoryTree(String user, String deviceId, String path, int depth, ResponseCallback<Response.ListDirectory> callback)
+	+void downloadFile(String user, String deviceId, String path, String fileName, File downloadFile, ResponseCallback<Response.DownloadFile> callback)
+	+void uploadFile(String user, String deviceId, String path, String fileName, File uploadFile, ResponseCallback<Response.UploadFile> callback)
+	+void moveFile(String user, String deviceId, String fromPath, String fromFile, String toPath, String toFile, ResponseCallback<Response.MoveFile> callback)
+	+void deleteFile(String user, String deviceId, String path, String fileName, ResponseCallback<Response.DeleteFile> callback)
+	+void sendMessage(String user, Message message, List<Recipient> recipients, ResponseCallback<Response.SendMessage> callback)
+	-void createRemoteConnection(String user, String deviceUUID)
+	+void connectionSuccess(String connectionUUID, RemoteConnection connection, ConnectionData data)
+	+void connectionWaiting(String connectionUUID, RemoteConnection connection, SndrBlockConnector.ConnectionData data)
+	+void connectionFailed()
+	+void pushNotificationReceived(String connectionUUID)
+}
+interface SndrBlockConnectorListener {
+}
+
+enum SndrBlockService {
+	INSTANCE
+	BUFFER_SIZE
+	EOF
+	fileService
+	~SndrBlockService()
+	+void sendProtobuf(RemoteConnection connection, com.google.protobuf.GeneratedMessageV3 data, RequestType type, boolean isRequest)
+	+SndrFS getFileTree(Path start, int depth)
+	+List<SndrFS> getFileList(Path start, int depth)
+	+SndrFS createFile(Path path)
+	+void sendFile(RemoteConnection connection, File fileToSend)
+	+void receiveFile(RemoteConnection connection, File fileToReceive, long expectedSize, CountDownLatch latch)
+	+Path moveFile(File source, File target)
+	+boolean deleteFile(File file)
+	-{static}void benchmark(long start, long size, String message)
+}
+
+class FileService {
+	-{static}Logger logger
+	-XXHashFactory hashFactory
+	+FileService()
+	+SndrFS getFileTree(Path start, int depth)
+	+List<SndrFS> getFileList(Path start, int depth)
+	+void writeTreeToFile(File file, SndrFS directory)
+	+void writeListToFile(File file, List<SndrFS> list)
+	+SndrFS createDirectory(String name)
+	+SndrFS createFile(Path path)
+	-long generateHash(Path path, boolean is64Bit, byte[] buffer)
+	+Path moveFile(File source, File target)
+	+boolean deleteFile(File file)
+}
+
+class RemoteConnection {
+	-{static}Logger logger
+	-{static}int findClientTimeout
+	-{static}IceServer[] iceServers
+	-{static}Object channelLock
+	-UUID connectionId
+	-long lastContacted
+	-DataChannelCollection dataChannels
+	-DataChannel protobufChannel
+	-DataChannel fileChannel
+	-Connection connection
+	+RemoteConnection()
+	+void close()
+	-Connection createConnection(String id, DataStream[] streams)
+	-DataChannel createDataChannel(String label, DataChannelCollection dataChannels)
+	+void setProtobufListener(ReceiveListener listener)
+	+void setFileListener(ReceiveListener listener)
+	+ConnectionState getConnectionState()
+	~void updateLastContacted()
+	+long getLastContacted()
+	+void createOffer(ConnectionListener listener)
+	+void createAnswer(ConnectionListener listener)
+	+void setOfferJson(String offerJson)
+	+void setAnswerJson(String answerJson)
+	+String getConnectionId()
+	+DataChannel getFileChannel()
+	+DataChannel getProtobufChannel()
+}
+
+class ClientManager {
+	-{static}ClientManager instance
+	-ClientManager()
+	+{static}ClientManager getInstance()
+	+Future<Response<Model>> execute(Request<Model> request)
+}
+
+class ClientTask {
+	-RemoteConnection connection
+	-GeneratedMessageV3 requestProtobuf
+	-Response<Model> response
+	-RequestType type
+	-ResponseCallback<Model> listener
+	-File uploadFile
+	-File downloadFile
+	-CountDownLatch latch
+	+ClientTask(Request<Model> request)
+	#Response<Model> call()
+	+void scheduled()
+	+void running()
+	+void succeeded()
+	+void failed()
+	+void cancelled()
+	+void receiveString(RemoteConnection connection, String message)
+	+void receiveDataBuffer(RemoteConnection connection, DataBuffer data)
+	+void receiveProtobuf(RemoteConnection connection, Header header, DataBuffer dataBuffer)
+}
+
+class Request {
+	~TaskListener taskListener
+	~ResponseCallback<Model> listener
+	~RemoteConnection connection
+	~GeneratedMessageV3 requestProtobuf
+	~RequestType type
+	~File uploadFile
+	~File downloadFile
+	-Request(Builder<Model> builder)
+}
+
+class Response {
+	+Model model
+	+RequestType type
+}
+
+
+@enduml

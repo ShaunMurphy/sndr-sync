@@ -1,0 +1,539 @@
+@startuml
+
+Sync --> "1" SsdpController
+Sync --> "0..1" SyncListener
+SsdpController --> "0..1" MessageSender
+SsdpController --> "0..1" DiscoverSender
+SsdpController --> "0..1" MulticastListener
+SsdpController --> "0..1" UnicastListener
+SsdpController --* "0..*" ServiceInfo
+SsdpController --* "0..*" NetworkInterface
+SsdpController --> "1" PacketAnalyzer
+SsdpController --* "0..*" ClientData
+ClientData --> "1" PacketData
+ServiceInfo --> "0..1" ServiceSearchTask
+DiscoverSender --> "1" ResponseHandler
+DiscoverSender --* "0..*" NetworkInterface
+MessageSender --* "0..*" NetworkInterface
+PeriodicTask --> "1" SsdpController
+PeriodicTask --> "1" State
+PeriodicTask --* "0..*" NetworkInterface
+MulticastListener --* "0..*" NetworkInterface
+UnicastListener --* "0..*" NetworkInterface
+MulticastListener --> "1" SocketType
+UnicastListener --> "1" SocketType
+ResponseListener --> "1" State
+ResponseListener --> "1" ResponseHandler
+ResponseListener --* "0..*" NetworkInterface
+ResponseListener --> "1" SocketType
+SsdpSocket --> "1" SocketType
+SsdpConstants -- UUIDGenerator
+SsdpPacket --> "1" PacketData
+ServiceSearchTask --> "1" ResponseHandler
+KeyService --> "0..1" KeyServiceListener
+
+SsdpController ..> SsdpConstants
+DiscoverSender ..> SsdpSocket
+DiscoverSender ..> MessageGenerator
+DiscoverResponder ..> MessageGenerator
+MessageSender ..> MessageGenerator
+KeyService ..> MessageGenerator
+KeyService ..> Sndr_Proto
+KeyService ..> Crypto
+MessageGenerator ..> SsdpConstants
+SsdpPacket ..> SsdpConstants
+PeriodicTask ..> SsdpSocket
+ServiceSearchTask ..> SsdpSocket
+MulticastListener ..> SsdpSocket
+UnicastListener ..> SsdpSocket
+
+
+class Sync implements KeyServiceListener {
+	-Logger logger
+	-SsdpController controller
+	-SyncListener listener
+	+{static}String user
+	+Sync(String user, SsdpConstants.DEVICE_TYPES type, String deviceUUID)
+	+void setUser(String user)
+	+void setListener(SyncListener listener)
+	+void initializeSync()
+	+void start()
+	+void stop()
+	+void sendKeyServiceRequest()
+	+{static}KeyPair getDeviceKeys()
+	+{static}String getUserPrivateKey()
+	+void succeeded(byte[] userPrivateKey)
+	+void failed(String reason)
+}
+
+interface SyncListener extends KeyServiceListener {
+}
+
+class SsdpController implements ResponseHandler {
+	-Logger logger
+	-ExecutorService executor
+	-MessageSender messageSender
+	-DiscoverSender discoverSender
+	-MulticastListener multicastListener
+	-UnicastListener unicastListener
+	#DiscoverResponder discoverResponder
+	-List<ServiceInfo> services
+	-boolean enablePeriodicSender
+	-boolean enableDiscoverSender
+	-boolean enableMulticastListener
+	-boolean enableUnicastListener
+	-PacketAnalyzer analyzer
+	-HashMap<InetSocketAddress,ClientData> clients
+	+SsdpController()
+	+SsdpController(List<NetworkInterface> networkInterfaces)
+	+SsdpController(InetAddress localAddress, int localPort)
+	+SsdpController(InetAddress localAddress, List<NetworkInterface> networkInterfaces)
+	-SsdpController(InetAddress localAddress, int localPort, List<NetworkInterface> networkInterfaces)
+	+void setPeriodicSender(boolean enable)
+	+void setDiscoverSender(boolean enable)
+	+void setMulticastListener(boolean enable)
+	+void setUnicastListener(boolean enable)
+	+MessageSender getPeriodicMessageSender()
+	+DiscoverSender getDiscoverSender()
+	+void setPeriodicMessageSender(MessageSender messageSender)
+	+void processMessage(DatagramPacket datagramPacket)
+	+void addClient(InetSocketAddress address, PacketData data)
+	+void addServiceInfo(ServiceInfo serviceInfo)
+	+boolean removeServiceInfo(ServiceInfo serviceInfo)
+	+List<ServiceInfo> getServiceInfo()
+	-void createExecutorService()
+	+void start()
+	+void stop()
+	+void sendKeyServiceRequest(KeyServiceListener listener)
+}
+
+interface ResponseHandler {
+	void processMessage(DatagramPacket packet)
+	void addClient(InetSocketAddress address, PacketData data)
+}
+
+class PacketAnalyzer {
+	-{static}PacketAnalyzer instance
+	-Set<String> ST_deviceWhiteList
+	-DiscoverResponder discoverResponder
+	-SsdpController controller
+	-String allowedServices
+	-PacketAnalyzer()
+	#{static}PacketAnalyzer getInstance()
+	+void setController(SsdpController controller)
+	+void discoveryMessage(DatagramPacket datagramPacket)
+	+void process(DatagramPacket datagramPacket)
+	-void processNotify(SsdpPacket packet)
+	-void processMSearch(SsdpPacket packet, InetAddress remoteAddress, int remotePort)
+	-void processOK(SsdpPacket packet)
+}
+
+abstract class ServiceSearchTask implements Runnable {
+	-Logger logger
+	-ExecutorService executor
+	#InetAddress host
+	#int port
+	-ResponseHandler responseHandler
+	+ServiceSearchTask(InetAddress host, int port)
+	+void setResponseHandler(ResponseHandler responseHandler)
+	+void run()
+	+{abstract}List<String> getMessagesToSend()
+	+void sendMessage(List<String> messages)
+	+{abstract}void processRequest(PacketData data)
+}
+
+class KeyService extends ServiceSearchTask implements ResponseHandler {
+	-Logger logger
+	-int socketTimeOut
+	-int maxConnections
+	-InetSocketAddress serverSocket
+	-boolean useAsynchronousSocketChannels
+	-Crypto crypto
+	-KeyPair deviceKeys
+	-KeyServiceListener listener
+	+KeyService()
+	+void setListener(KeyServiceListener listener)
+	-byte[] getUserPrivateKey()
+	-String getUser()
+	+List<String> getMessagesToSend()
+	+void run()
+	+void processMessage(DatagramPacket datagramPacket)
+	+void addClient(InetSocketAddress address, PacketData data)
+	-AsynchronousServerSocketChannel initializeAsynchronousServerSocket(InetAddress localAddress)
+	-ServerSocketChannel initializeServerSocket(InetAddress localAddress)
+	-void startServerSocket(AsynchronousServerSocketChannel serverChannel)
+	-void startServerSocket(ServerSocketChannel serverChannel)
+	+void processRequest(PacketData data)
+	-void startAsynchronousClientSocket(InetSocketAddress remoteSocket)
+	-void startClientSocket(InetSocketAddress remoteSocket)
+	-byte[] getUserPrivateKey(Sndr_Proto.KeyResponse response, KeyPair deviceKeys)
+	-Sndr_Proto.KeyRequest generateKeyRequest(String user, KeyPair deviceKeys)
+	-Sndr_Proto.KeyResponse generateKeyResponse(byte[] userPrivateKey, byte[] requestingDevicePublicKey, KeyPair deviceKeys)
+	-boolean validateKeyRequest(Sndr_Proto.KeyRequest request, String user)
+	-boolean validateKeyResponse(Sndr_Proto.KeyResponse response, String user)
+	-HashMap<String,byte[]> getUserDevices(String user)
+}
+
+interface KeyServiceListener {
+	+void succeeded(byte[] userPrivateKey)
+	+void failed(String reason)
+}
+
+class ClientData {
+	+InetSocketAddress socket
+	+PacketData data
+	+long creationTime
+	-long expiration
+	+ClientData(InetSocketAddress socket, PacketData data)
+	+boolean hasExpired()
+}
+
+class PacketData {
+	+InetAddress remoteAddress
+	+int remotePort
+	+String SL
+	+String host
+	+String cacheControl
+	+Date date
+	+String location
+	+int MX
+	+String MAN
+	+String NT
+	+String NTS
+	+String server
+	+String ST
+	+String userAgent
+	+String USN
+	+Integer TCPPORT
+	+String CPFN
+	+String CPUUID
+	+Integer BOOTID
+	+Integer CONFIGID
+	+Integer SEARCHPORT
+	~boolean malformedData
+	+PacketData(InetAddress remoteAddress, int remotePort)
+	+String toString()
+	+boolean checkMalformedRequest()
+}
+
+class ServiceInfo {
+	+String host
+	+int port
+	+String NT
+	+String location
+	+String USN
+	+String URN
+	+ServiceSearchTask serviceProcessor
+	+ServiceInfo(String host, int port, String NT, String location, String USN)
+	+void setServiceProcessingClass(ServiceSearchTask processor)
+}
+
+class DiscoverResponder implements Runnable {
+	-Logger logger
+	-LinkedBlockingQueue<QueueData> queue
+	-Random random
+	-boolean keepCheckingQueue
+	-int messagesToSend
+	+void addOKMessage(InetAddress remoteAddress, int remotePort, String searchTarget)
+	+void run()
+	-void sendOKMessage(InetAddress host, int port, String message)
+	+void stop()
+}
+
+class DiscoverSender extends PeriodicTask {
+	-Logger logger
+	-ResponseHandler responseHandler
+	-int numberOfDiscoverMessagesToSend
+	-int ttl
+	+DiscoverSender(SsdpController controller, InetAddress host, int port, List<NetworkInterface> networkInterfaces)
+	+void setResponseHandler(ResponseHandler responseHandler)
+	+List<String> getMessagesToSend()
+	+void sendMessage(List<String> messages)
+}
+
+class MessageSender extends PeriodicTask {
+	+MessageSender(SsdpController controller, InetAddress localAddress, int localPort)
+	+MessageSender(SsdpController controller, InetAddress localAddress, int localPort, List<NetworkInterface> networkInterfaces)
+	+List<String> getMessagesToSend()
+}
+
+abstract class PeriodicTask implements Runnable {
+	-Logger logger
+	#InetAddress host
+	#int port
+	#ExecutorService executor
+	-List<NetworkInterface> networkInterfaces
+	-ReentrantReadWriteLock stateLock
+	-int sleepDelay
+	-State state
+	#SsdpController controller
+	~PeriodicTask(SsdpController controller, InetAddress host, int port, List<NetworkInterface> networkInterfaces)
+	+void run()
+	+void sendMessage(List<String> messages)
+	+void setDelay(int delay)
+	-void enterSleep()
+	-void exitSleep()
+	+{abstract}List<String> getMessagesToSend()
+	-void setState(State state)
+	-State getState()
+}
+
+class MulticastListener extends ResponseListener {
+	+MulticastListener(InetAddress host, List<NetworkInterface> networkInterfaces)
+	+void run()
+	+void kill()
+}
+
+class UnicastListener extends ResponseListener {
+	+UnicastListener(InetAddress host, int port, List<NetworkInterface> networkInterfaces)
+	+void run()
+	+void kill()
+}
+
+abstract class ResponseListener implements Runnable {
+	-SsdpSocket.Type type
+	-InetAddress host
+	-int port
+	-List<NetworkInterface> networkInterfaces
+	#State state
+	#ResponseHandler responseHandler
+	-ReentrantReadWriteLock stateLock
+	#ResponseListener(SsdpSocket.Type type, InetAddress host, int port, List<NetworkInterface> networkInterfaces)
+	+void setResponseHandler(ResponseHandler responseHandler)
+	+{abstract}void run()
+	#void setState(State state)
+	#State getState()
+	+SsdpSocket createSocket()
+}
+
+enum State {
+	STOPPED
+	STARTED
+	SLEEP
+	SUSPENDED
+}
+
+class MessageGenerator {
+	-{static}String NEWLINE
+	+{static}String notifyAliveMessage()
+	+{static}String notifyServiceAliveMessage(ServiceInfo service)
+	+{static}String notifyByeByeMessage()
+	+{static}String notifyUpdateMessage()
+	+{static}String mSearchRequestMessage_MultiCast(int mx, String searchTarget)
+	+{static}String mSearchRequestMessage_UniCast(InetSocketAddress address, String searchTarget)
+	+{static}String mSearchRequestMessage_UniCast(String address, int port, String searchTarget)
+	+{static}String mSearchOK(String searchTarget)
+	+{static}String mSearchRequestMessage_MultiCast(int mx, String searchTarget, int replyTcpPort)
+}
+
+class NetworkUtil {
+	+{static}InetAddress getIPv4Address()
+	+{static}InetAddress getAndroidWIfiIPv4Address()
+	+{static}InetAddress getIPv6Address()
+	-{static}List<InetAddress> getLocalAddress(boolean getIPv4, boolean getIPv6, String interfaceName)
+}
+
+class SsdpConstants {
+	+{static}String SSDP_ADDRESS
+	+{static}InetAddress INET_SSDP_ADDRESS
+	+{static}int SSDP_PORT
+	+{static}String DOMAIN_NAME
+	+{static}String PRODUCT_NAME
+	+{static}int PRODUCT_VERSION
+	+{static}DEVICE_TYPES currentDevice
+	+{static}InetAddress localAddress
+	+{static}UUID deviceUUID
+	#{static}String MSEARCH
+	#{static}String NOTIFY
+	#{static}String OK
+	+{static}String SL_MSEARCH
+	+{static}String SL_NOTIFY
+	+{static}String SL_OK
+	+{static}String HOST
+	+{static}String EXT
+	+{static}String DATE
+	+{static}String MAN_DISCOVER
+	+{static}String MX
+	+{static}String NEWLINE
+	+{static}String ST
+	+{static}String ST_ALL
+	+{static}String ST_ROOT_DEVICE
+	+{static}String ST_ROOT
+	+{static}String ST_DEVICE
+	+{static}int CACHE_AGE
+	+{static}String CACHE_CONTROL
+	+{static}String LOCATION
+	+{static}String NT
+	+{static}String NT_ROOT
+	+{static}String NT_DEVICE
+	+{static}String SERVER_OS
+	+{static}void initialize(InetAddress localAddress, DEVICE_TYPES currentDevice)
+	+{static}void initialize(InetAddress localAddress, DEVICE_TYPES currentDevice, String deviceUUID)
+	+{static}String ST_DEVICE_UUID(String deviceUUID)
+	+{static}String ST_DEVICE_TYPE_VERSION(DEVICE_TYPES type, int version)
+	+{static}String ST_SERVICE_TYPE_VERSION(SERVICE_TYPES type, int version)
+	+{static}String ST_DOMAIN_DEVICE_TYPE_VERSION(DEVICE_TYPES type, int version)
+	+{static}String ST_DOMAIN_SERVICE_TYPE_VERSION(SERVICE_TYPES type, int version)
+	-{static}String getLocation()
+	+{static}String getDeviceUSN(DEVICE_TYPES type)
+	+{static}String getDomainDeviceUSN(DEVICE_TYPES type)
+	+{static}String getDefaultDeviceUSN()
+	+{static}String getServiceUSN(String serviceName, int version)
+	+{static}String getDomainServiceUSN(SERVICE_TYPES service, int version)
+	+{static}String getUserAgent()
+	+{static}String getDate()
+	+{static}Date parseDate(String date)
+	+{static}String generateType1UUID(InetAddress localAddress)
+}
+
+class SsdpPacket extends HttpPacket {
+	-Logger logger
+	-DatagramPacket datagramPacket
+	+InetAddress senderAddress
+	-PacketData data
+	+int senderPort
+	+SsdpPacket()
+	+SsdpPacket(DatagramPacket datagramPacket)
+	+boolean isMSearch()
+	+boolean isNotify()
+	+boolean isOK()
+	+DatagramPacket getDatagramPacket()
+	+void setDatagramPacket(DatagramPacket packet)
+	+PacketData getData()
+	-void generateData()
+	-void setMessageData(String[] headers)
+}
+
+class HttpPacket {
+	-Map<String,String> headers
+	-URI requestUri
+	-byte[] content
+	-String method
+	-String version
+	#boolean parse(HttpInputStream his)
+	+boolean parse(InputStream inputStream)
+	+boolean isMethod(String method)
+	+boolean isGet()
+	+boolean isHead()
+	+String getVersion()
+	+void setVersion(String version)
+	+String getHeader(String fieldName)
+	+String setHeader(String str)
+	+String setHeader(String fieldName, String fieldValue)
+	+String[] getHeaders()
+	+URI getRequestUri()
+	+void setRequestUri(URI requestUri)
+	+byte[] getContent()
+	+void setContent(byte[] content)
+	+void setContent(byte[] content, boolean updateContentLength)
+	+int getContentLength()
+	+void setContentLength(int length)
+}
+
+class SsdpSocket {
+	-Logger logger
+	-boolean showIncomingTransactionIpAddresses
+	-boolean showOutgoingTransactionIpAddresses
+	-MulticastSocket multicastSocket
+	-NetworkInterface network
+	-InetSocketAddress multicastGroup
+	-DatagramSocket datagramSocket
+	-InetSocketAddress remoteSocket
+	-ByteBuffer buffer
+	-Type type
+	+SsdpSocket(Type type, InetAddress address, int port)
+	+void displaySocketInfo()
+	+void sendMulticastMessage(String message, int timeout)
+	+void sendUnicastMessage(String message, int timeout)
+	+DatagramPacket receiveUnicast()
+	+DatagramPacket receiveMulticast()
+	+void setTimeout(int timeout)
+	+void setBlocking(boolean blocking)
+	+void close()
+	+String getSocketAddress()
+}
+
+enum SocketType {
+	Unicast
+	Multicast
+}
+
+class UUIDGenerator {
+	-{static}Object lock
+	-{static}long lastTime
+	-{static}long clockSequence
+	-long hostIdentifier
+	-{static}long GREG_OFFSET
+	-{static}long MILLI_MULT
+	-{static}UUIDGenerator instance
+	-{static}InetAddress localAddress
+	-UUIDGenerator()
+	+{static}UUIDGenerator getInstance(InetAddress thisDeviceLocalAddress)
+	+UUID generateUUID()
+	-UUID generateIdFromTimestamp()
+	-long getUUIDTime()
+	-{static}byte[] getMACAddress()
+	-{static}long getMACAddressLong()
+	+long getTimeFromUUID(UUID uuid)
+	+String getMACFromUUID(UUID uuid)
+}
+
+class Sndr_Proto {
+	-{static}com.google.protobuf.Descriptors.Descriptor internal_static_com_sndr_sync_Request_descriptor
+	-{static}com.google.protobuf.GeneratedMessage.FieldAccessorTable internal_static_com_sndr_sync_Request_fieldAccessorTable
+	-{static}com.google.protobuf.Descriptors.Descriptor internal_static_com_sndr_sync_Response_descriptor
+	-{static}com.google.protobuf.GeneratedMessage.FieldAccessorTable internal_static_com_sndr_sync_Response_fieldAccessorTable
+	-{static}com.google.protobuf.Descriptors.Descriptor internal_static_com_sndr_sync_Chunk_descriptor
+	-{static}com.google.protobuf.GeneratedMessage.FieldAccessorTable internal_static_com_sndr_sync_Chunk_fieldAccessorTable
+	-{static}com.google.protobuf.Descriptors.Descriptor internal_static_com_sndr_sync_KeyRequest_descriptor
+	-{static}com.google.protobuf.GeneratedMessage.FieldAccessorTable internal_static_com_sndr_sync_KeyRequest_fieldAccessorTable
+	-{static}com.google.protobuf.Descriptors.Descriptor internal_static_com_sndr_sync_KeyResponse_descriptor
+	-{static}com.google.protobuf.GeneratedMessage.FieldAccessorTable internal_static_com_sndr_sync_KeyResponse_fieldAccessorTable
+	-{static}com.google.protobuf.Descriptors.FileDescriptor descriptor
+	-Sndr_Proto()
+	+{static}void registerAllExtensions(com.google.protobuf.ExtensionRegistry registry)
+	+{static}com.google.protobuf.Descriptors.FileDescriptor getDescriptor()
+}
+
+class Crypto {
+	-Logger logger
+	-int AES_KEY_SIZE
+	-String AES_CBC_CIPHER
+	-String RSA_ECB_CIPHER
+	-ByteBuffer buffer
+	+SecretKeySpec generateAesKey()
+	+Cipher generateCipher(SecretKeySpec aesKeySpec, byte[] iv, int cipherOperation)
+	+byte[] encryptString(Cipher cipher, byte[] input)
+	+byte[] decryptString(Cipher cipher, byte[] input)
+	+void encryptStream(Cipher cipher, InputStream inputStream, OutputStream outputStream)
+	+void encryptStream1(Cipher cipher, InputStream inputStream, OutputStream outputStream)
+	+void decryptStream1(Cipher cipher, InputStream inputStream, OutputStream outputStream)
+	+void decryptStream(Cipher cipher, InputStream inputStream, OutputStream outputStream)
+	+void encryptFileStream(Cipher cipher, File inputFile, OutputStream outputStream)
+	+void decryptFileStream(Cipher cipher, InputStream inputStream, File outputFile)
+	-void fastCopy(InputStream input, OutputStream output)
+	+void encryptChannel(Cipher cipher, InputStream inputStream, AsynchronousSocketChannel outputChannel)
+	+void decryptChannel(Cipher cipher, AsynchronousSocketChannel inputChannel, OutputStream outputStream)
+	+void encryptFileStream(Cipher cipher, File inputFile, AsynchronousSocketChannel outputChannel)
+	+void decryptFileStream(Cipher cipher, AsynchronousSocketChannel inputChannel, File outputFile)
+	+void encryptChannelToStream(Cipher cipher, FileChannel inputChannel, OutputStream outputStream)
+	+void decryptStreamToChannel(Cipher cipher, InputStream inputStream, FileChannel outputChannel)
+	+void fileStreamToChannel(File inputFile, AsynchronousSocketChannel outputChannel)
+	+void channelToFileStream(AsynchronousSocketChannel inputChannel, File outputFile)
+	+void channelToChannel(AsynchronousSocketChannel inputChannel, FileChannel outputChannel)
+	+void channelToChannel(FileChannel inputChannel, AsynchronousSocketChannel outputChannel)
+	+void streamToChannel(InputStream inputStream, FileChannel outputChannel)
+	+void channelToStream(FileChannel inputChannel, OutputStream outputStream)
+	+void channelToStream(AsynchronousSocketChannel inputChannel, OutputStream outputStream)
+	+void streamToStream(InputStream inputStream, OutputStream outputStream)
+	-void fastCopy(AsynchronousByteChannel inputChannel, OutputStream outputStream)
+	-void fastCopy(InputStream inputStream, AsynchronousByteChannel outputChannel)
+	-void fastCopy(AsynchronousByteChannel inputChannel, FileChannel outputChannel)
+	-void fastCopy(FileChannel inputChannel, AsynchronousByteChannel outputChannel)
+	-void fastCopy(InputStream inputStream, FileChannel outputChannel)
+	-void fastCopy(FileChannel inputChannel, OutputStream outputStream)
+	+byte[] wrapAesKey(SecretKeySpec aesKeySpec, byte[] encodedKey)
+	+SecretKeySpec unwrapAesKey(byte[] wrappedKey, byte[] encodedKey)
+}
+
+@enduml

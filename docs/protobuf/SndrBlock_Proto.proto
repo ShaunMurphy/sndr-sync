@@ -1,0 +1,232 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "SndrFs.proto";
+
+package com.sndr.proto;
+//Default - SPEED, other options CODE_SIZE, LITE_RUNTIME
+option optimize_for = SPEED;
+
+enum RequestType {
+	LIST_DIRECTORY = 0;
+	UPLOAD_FILE = 1;
+	DOWNLOAD_FILE = 2;
+	DELETE_FILE = 3;
+	MOVE_FILE = 4;
+	
+	SEND_MESSAGE = 5;
+	STASH_NOTE = 6;
+	STASH_FILE = 7;
+	
+	KEYS = 8;
+}
+
+
+message Authentication {
+	RequestType type = 1;
+	google.protobuf.Timestamp timestamp = 2; 
+    bytes signature = 3;
+	string userUri = 4;
+}
+
+message Header {
+	RequestType type = 1;
+	uint32 quantity = 2;
+}
+
+message Request {
+	message ListDirectory {
+		Authentication authentication = 1;
+		string startPath = 2;
+		uint32 depth = 3;
+	}
+	
+	message UploadFile {
+		Authentication authentication = 1;
+		string path = 2;
+		SndrFS file = 3;
+	}
+	
+	message DownloadFile {
+		Authentication authentication = 1;
+		string path = 2;
+		string file = 3;
+	}
+	
+	message MoveFile {
+		Authentication authentication = 1;
+		string fromPath = 2;
+		string toPath = 3;
+		string fromFile = 4;
+		string toFile = 5;
+	}
+	
+	message DeleteFile {
+		Authentication authentication = 1;
+		string path = 2;
+		string file = 3;
+	}
+	
+	message SendMessage {
+		Authentication authentication = 1;
+		Message message = 2;
+		repeated Recipient recipients = 3;
+
+	}
+	
+	message StashNote {
+		Authentication authentication = 1;
+		StashedNote note = 2;
+		string updateEncryptedUUID = 3;
+	}
+	
+	message StashFile {
+		Authentication authentication = 1;
+		StashedFile file = 2;
+		string updateEncryptedUUID = 3;
+	}
+	
+	message Keys {
+		Authentication authentication = 1;
+		int32 version = 2;
+		string username = 3;
+		bytes devicePublicKey = 4;
+		bytes deviceUUID = 5;
+		//bytes signature = 6;
+	}
+}
+
+message Response {
+	message ListDirectory {
+		Authentication authentication = 1;
+		SndrFS root = 2;
+		string startPath = 3;
+		uint32 depth = 4;
+	}
+	
+	message UploadFile {
+		Authentication authentication = 1;
+		string status = 2;
+	}
+	
+	message DownloadFile {
+		Authentication authentication = 1;
+		string path = 2;
+		SndrFS file = 3;
+		//TODO Binary data
+	}
+	
+	message MoveFile {
+		Authentication authentication = 1;
+		string status = 2;
+	}
+	
+	message DeleteFile {
+		Authentication authentication = 1;
+		string status = 2;
+	}
+	
+	message SendMessage {
+		Authentication authentication = 1;
+		string status = 2;
+	}
+	
+	message StashNote {
+		Authentication authentication = 1;
+		string status = 2;
+	}
+	
+	message StashFile {
+		Authentication authentication = 1;
+		string status = 2;
+	}
+	
+	message Keys {
+		Authentication authentication = 1;
+		int32 version = 2;
+		bytes encryptedKey = 3;
+		string keyType = 4;
+		bytes wrappedAesKey = 5;
+		bytes iv = 6;
+		bytes deviceUUID = 7;
+		//bytes signature = 8;
+	}
+}
+
+
+message Thread { 
+	string threadId = 1;
+	string clientUuid = 2;
+	Rules rules = 3;
+	int32 restrictions = 4;
+	repeated Tag tags = 5;
+}
+
+message Message {
+	string user = 1;
+	Thread thread = 2;
+	string parent = 3;
+	string clientUuid = 4;
+	string plainText = 5;
+	ServiceLink sender = 6;
+	repeated Attachment attachments = 7;
+}
+
+message ServiceLink {
+	enum ServiceType {
+		sndr = 0;
+		mailto = 1;
+		twitter = 2;
+		facebook = 3;
+		sms = 4;
+	}
+	ServiceType type = 1;
+	string serviceUri = 2;
+}
+
+message Attachment {
+	string user = 1;
+	string path = 2;
+	string file = 3;
+	string clientUuid = 4;
+}
+
+message Recipient { 
+	ServiceLink serviceLink = 1;
+	int32 restrictions = 2;
+	//Not using public key, maybe needed in the future.
+	string publicKey = 3;
+}
+
+message Rules {
+	int32 deleteAfterNumMinutes = 1;
+	int32 deleteAfterNumViews = 2;
+	bool deleteAfterScreenshot = 3;
+	bool notifyAfterScreenshot = 4;
+	bool notifyAfterForward = 5;
+}
+
+message Tag {
+	string name = 1;
+	string color = 2;
+	bool suggested = 3;
+}
+
+message StashedNote {
+	string user = 1;
+	string clientUuid = 2;
+	string text = 3;
+	int32 restrictions = 4;
+	string reminder = 5;
+	repeated Attachment attachments = 6;
+	repeated Tag tags = 7;
+}
+
+message StashedFile {
+	string user = 1;
+	string clientUuid = 2;
+	Attachment attachment = 3;
+	int32 restrictions = 4;
+	string reminder = 5;
+	repeated Tag tags = 6;
+}
